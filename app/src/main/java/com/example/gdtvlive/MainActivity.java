@@ -11,17 +11,17 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
-import org.xwalk.core.XWalkPreferences;
-import org.xwalk.core.XWalkResourceClient;
-import org.xwalk.core.XWalkUIClient;
-import org.xwalk.core.XWalkView;
+import com.tencent.smtt.sdk.WebChromeClient;
+import com.tencent.smtt.sdk.WebSettings;
+import com.tencent.smtt.sdk.WebView;
+import com.tencent.smtt.sdk.WebViewClient;
 
 public class MainActivity extends Activity {
 
-    private XWalkView xWalkView;
+    private WebView webView;
     private int currentIndex = 0;
     private View customView;
-    private XWalkUIClient.CustomViewCallback customViewCallback;
+    private WebChromeClient.CustomViewCallback customViewCallback;
     private boolean dialogShowing = false;
 
     private String[] channelNames = {
@@ -48,43 +48,25 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
-        // 启用 Crosswalk 硬件加速
-        XWalkPreferences.setValue(XWalkPreferences.REMOTE_DEBUGGING, true);
-        XWalkPreferences.setValue(XWalkPreferences.ANIMATABLE_XWALK_VIEW, true);
-
-        xWalkView = new XWalkView(this);
-        setContentView(xWalkView, new ViewGroup.LayoutParams(
+        webView = new WebView(this);
+        setContentView(webView, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // 设置 User-Agent
-        xWalkView.setUserAgentString(
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUserAgentString(
             "Mozilla/5.0 (Linux; Android 4.4.2; SmartTV Build/KOT49H) " +
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.102 Safari/537.36"
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.132 Safari/537.36"
         );
 
-        // 资源客户端
-        xWalkView.setResourceClient(new XWalkResourceClient(xWalkView) {
-            @Override
-            public void onLoadStarted(XWalkView view, String url) {
-                Toast.makeText(MainActivity.this, "加载中...", Toast.LENGTH_SHORT).show();
-            }
+        webView.setWebViewClient(new WebViewClient());
 
-            @Override
-            public void onLoadFinished(XWalkView view, String url) {
-                injectAutoPlay();
-            }
-
-            @Override
-            public void onReceivedLoadError(XWalkView view, int errorCode,
-                                           String description, String failingUrl) {
-                Toast.makeText(MainActivity.this,
-                        "加载失败: " + description, Toast.LENGTH_LONG).show();
-            }
-        });
-
-        // UI 客户端：处理全屏
-        xWalkView.setUIClient(new XWalkUIClient(xWalkView) {
+        webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public void onShowCustomView(View view, CustomViewCallback callback) {
                 if (customView != null) {
@@ -97,7 +79,7 @@ public class MainActivity extends Activity {
                 decor.addView(customView, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT));
-                xWalkView.setVisibility(View.GONE);
+                webView.setVisibility(View.GONE);
             }
 
             @Override
@@ -110,33 +92,12 @@ public class MainActivity extends Activity {
                     if (customViewCallback != null) {
                         customViewCallback.onCustomViewHidden();
                     }
-                    xWalkView.setVisibility(View.VISIBLE);
+                    webView.setVisibility(View.VISIBLE);
                 }
             }
         });
 
         loadChannel(0);
-    }
-
-    private void injectAutoPlay() {
-        String js =
-            "javascript:(function() {" +
-            "    function clickPlay() {" +
-            "        var elements = document.querySelectorAll('[class*=play], [id*=play], .vjs-big-play-button, video');" +
-            "        for (var i = 0; i < elements.length; i++) {" +
-            "            try { elements[i].click(); } catch(e) {}" +
-            "        }" +
-            "        var videos = document.querySelectorAll('video');" +
-            "        for (var j = 0; j < videos.length; j++) {" +
-            "            try { videos[j].play(); videos[j].muted = false; } catch(e) {}" +
-            "        }" +
-            "    }" +
-            "    clickPlay();" +
-            "    setTimeout(clickPlay, 1000);" +
-            "    setTimeout(clickPlay, 3000);" +
-            "    setTimeout(clickPlay, 5000);" +
-            "})();";
-        xWalkView.loadUrl(js);
     }
 
     private void loadChannel(int index) {
@@ -145,7 +106,7 @@ public class MainActivity extends Activity {
         }
         currentIndex = index;
         String url = BASE_URL + channelIds[index];
-        xWalkView.loadUrl(url);
+        webView.loadUrl(url);
         Toast.makeText(this, channelNames[index], Toast.LENGTH_SHORT).show();
     }
 
@@ -195,10 +156,10 @@ public class MainActivity extends Activity {
                     return true;
                 case KeyEvent.KEYCODE_BACK:
                     if (customView != null) {
-                        xWalkView.loadUrl("javascript:document.exitFullscreen();");
+                        webView.loadUrl("javascript:document.exitFullscreen();");
                         return true;
-                    } else if (xWalkView.canGoBack()) {
-                        xWalkView.goBack();
+                    } else if (webView.canGoBack()) {
+                        webView.goBack();
                     } else {
                         finish();
                     }
@@ -229,26 +190,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
-        if (xWalkView != null) {
-            xWalkView.pauseTimers();
-            xWalkView.onHide();
-        }
+        if (webView != null) webView.onPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (xWalkView != null) {
-            xWalkView.resumeTimers();
-            xWalkView.onShow();
-        }
+        if (webView != null) webView.onResume();
     }
 
     @Override
     protected void onDestroy() {
-        if (xWalkView != null) {
-            xWalkView.onDestroy();
-            xWalkView = null;
+        if (webView != null) {
+            webView.destroy();
+            webView = null;
         }
         super.onDestroy();
     }
